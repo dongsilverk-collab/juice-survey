@@ -304,27 +304,34 @@ export function SurveyForm() {
       ))}
 
       {/* 하단 버튼 */}
-      <div className="flex gap-3">
-        {nextProductId ? (
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          {nextProductId ? (
+            <Button
+              size="lg"
+              className="flex-1"
+              onClick={() => { if (validateCurrent()) goToProduct(nextProductId); }}
+            >
+              다음 제품 <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          ) : null}
           <Button
             size="lg"
-            className="flex-1"
-            onClick={() => { if (validateCurrent()) goToProduct(nextProductId); }}
+            variant={nextProductId ? "outline" : "default"}
+            className={nextProductId ? "flex-1" : "w-full"}
+            onClick={handleSubmit}
+            disabled={submitting || doneCount === 0}
           >
-            다음 제품 <ChevronRight className="ml-1 h-4 w-4" />
+            {submitting
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />제출 중...</>
+              : `지금 ${doneCount}개 제출하기`}
           </Button>
-        ) : null}
-        <Button
-          size="lg"
-          variant={nextProductId ? "outline" : "default"}
-          className={nextProductId ? "flex-1" : "w-full"}
-          onClick={handleSubmit}
-          disabled={submitting || doneCount === 0}
-        >
-          {submitting
-            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />제출 중...</>
-            : `제출하기 (${doneCount}개)`}
-        </Button>
+        </div>
+        {doneCount > 0 && doneCount < selectedProducts.length && (
+          <p className="text-xs text-center text-muted-foreground">
+            나머지 {selectedProducts.length - doneCount}개는 나중에 새 설문으로 제출할 수 있어요.
+          </p>
+        )}
       </div>
     </div>
   );

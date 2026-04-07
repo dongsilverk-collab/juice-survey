@@ -20,11 +20,21 @@ export default function CompletePage() {
             </p>
           </div>
 
-          <Link href="/">
-            <Button variant="outline" className="mt-2">
-              처음으로 돌아가기
-            </Button>
-          </Link>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground bg-muted rounded-lg p-3">
+              나머지 제품은 나중에 다시 설문을 시작해서 제출하면 됩니다.
+            </div>
+            <Link href="/survey">
+              <Button className="w-full">
+                나머지 제품 계속 평가하기
+              </Button>
+            </Link>
+            <Link href="/">
+              <Button variant="outline" className="w-full">
+                처음으로 돌아가기
+              </Button>
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </main>
