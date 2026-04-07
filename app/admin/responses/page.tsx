@@ -10,33 +10,31 @@ import type { SurveyResponse } from "@/lib/types/survey";
 import { PRODUCTS, PRODUCT_LABELS } from "@/config/survey-config";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 
-// 같은 사람의 응답을 하나로 묶기 (1분 이내 + 동일 이름/연령/성별)
+// 이름이 같으면 같은 사람으로 묶기 (이름 없으면 개별 처리)
 function groupByRespondent(responses: SurveyResponse[]) {
-  const groups: SurveyResponse[][] = [];
-  const used = new Set<string>();
+  const namedGroups: Record<string, SurveyResponse[]> = {};
+  const unnamed: SurveyResponse[][] = [];
 
-  const sorted = [...responses].sort(
-    (a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime()
-  );
-
-  for (const r of sorted) {
-    if (used.has(r.id)) continue;
-    const t = new Date(r.submitted_at).getTime();
-    const group = sorted.filter((s) => {
-      if (used.has(s.id)) return false;
-      const diff = Math.abs(new Date(s.submitted_at).getTime() - t);
-      return (
-        diff <= 60000 &&
-        s.respondent_name === r.respondent_name &&
-        s.respondent_age_group === r.respondent_age_group &&
-        s.respondent_gender === r.respondent_gender
-      );
-    });
-    group.forEach((s) => used.add(s.id));
-    groups.push(group);
+  for (const r of responses) {
+    const name = r.respondent_name?.trim();
+    if (name) {
+      if (!namedGroups[name]) namedGroups[name] = [];
+      namedGroups[name].push(r);
+    } else {
+      unnamed.push([r]);
+    }
   }
 
-  return groups.reverse(); // 최신순
+  // 각 그룹을 최신 제출순으로 정렬
+  const allGroups = [
+    ...Object.values(namedGroups),
+    ...unnamed,
+  ];
+
+  return allGroups.sort(
+    (a, b) =>
+      new Date(b[0].submitted_at).getTime() - new Date(a[0].submitted_at).getTime()
+  );
 }
 
 export default function ResponsesPage() {
