@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { surveyConfig } from "@/config/survey-config";
+import { surveyConfig, PRODUCT_LABELS } from "@/config/survey-config";
 import type { SurveyStats } from "@/lib/types/survey";
 import {
   BarChart,
@@ -20,17 +19,9 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Users, Star, TrendingUp, ClipboardList, Loader2 } from "lucide-react";
+import { Users, Star, ClipboardList, Loader2 } from "lucide-react";
 
 const COLORS = ["#22c55e", "#3b82f6", "#eab308", "#f97316", "#ef4444"];
-
-const PURCHASE_LABELS: Record<string, string> = {
-  definitely: "반드시 구매",
-  probably: "아마 구매",
-  maybe: "잘 모르겠다",
-  probably_not: "아마 안 함",
-  definitely_not: "절대 안 함",
-};
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -63,19 +54,19 @@ export default function AdminDashboardPage() {
 
   if (!stats) return null;
 
-  const overallSatisfaction = stats.averageRatings["overall_satisfaction"] ?? 0;
+  const overallSatisfaction = stats.averageRatings?.["overall_satisfaction"] ?? 0;
 
-  // 별점 분포 차트 데이터 (전반적 만족도)
-  const satisfactionDist = stats.ratingDistribution["overall_satisfaction"] ?? {};
+  // 만족도 분포 차트
+  const satisfactionDist = stats.ratingDistribution?.["overall_satisfaction"] ?? {};
   const distData = [1, 2, 3, 4, 5].map((star) => ({
     name: `${star}점`,
     count: satisfactionDist[star] ?? 0,
   }));
 
-  // 구매 의향 파이 차트
-  const purchaseData = Object.entries(stats.purchaseIntentBreakdown).map(
+  // 제품별 응답 수 파이 차트
+  const productData = Object.entries(stats.purchaseIntentBreakdown ?? {}).map(
     ([key, count]) => ({
-      name: PURCHASE_LABELS[key] ?? key,
+      name: PRODUCT_LABELS[key] ?? key,
       value: count,
     })
   );
@@ -97,7 +88,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* 핵심 지표 카드 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -122,34 +113,7 @@ export default function AdminDashboardPage() {
                   <p className="text-sm text-muted-foreground">평균 만족도</p>
                   <p className="text-2xl font-bold">
                     {overallSatisfaction}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /5
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-100">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">NPS 점수</p>
-                  <p className="text-2xl font-bold">
-                    {stats.npsScore}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">
-                      {stats.npsScore >= 50 ? (
-                        <Badge variant="default" className="bg-green-500">좋음</Badge>
-                      ) : stats.npsScore >= 0 ? (
-                        <Badge variant="secondary">보통</Badge>
-                      ) : (
-                        <Badge variant="destructive">개선 필요</Badge>
-                      )}
-                    </span>
+                    <span className="text-sm font-normal text-muted-foreground">/5</span>
                   </p>
                 </div>
               </div>
@@ -165,10 +129,8 @@ export default function AdminDashboardPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">평균 맛 평점</p>
                   <p className="text-2xl font-bold">
-                    {stats.averageRatings["taste_overall"] ?? "-"}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /5
-                    </span>
+                    {stats.averageRatings?.["taste_overall"] ?? "-"}
+                    <span className="text-sm font-normal text-muted-foreground">/5</span>
                   </p>
                 </div>
               </div>
@@ -180,7 +142,7 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">만족도 분포</CardTitle>
+              <CardTitle className="text-lg">전반적 만족도 분포</CardTitle>
             </CardHeader>
             <CardContent>
               {stats.totalResponses > 0 ? (
@@ -203,14 +165,14 @@ export default function AdminDashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">구매 의향</CardTitle>
+              <CardTitle className="text-lg">제품별 응답 수</CardTitle>
             </CardHeader>
             <CardContent>
-              {purchaseData.length > 0 ? (
+              {productData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
                     <Pie
-                      data={purchaseData}
+                      data={productData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -220,11 +182,8 @@ export default function AdminDashboardPage() {
                       outerRadius={80}
                       dataKey="value"
                     >
-                      {purchaseData.map((_, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
+                      {productData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -247,7 +206,7 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {surveyConfig.questions
-                .filter((q) => q.type === "rating" || q.type === "scale")
+                .filter((q) => q.type === "scale")
                 .map((q) => (
                   <div
                     key={q.id}
@@ -255,10 +214,8 @@ export default function AdminDashboardPage() {
                   >
                     <span className="text-sm">{q.question}</span>
                     <span className="font-bold ml-2 whitespace-nowrap">
-                      {stats.averageRatings[q.id] ?? "-"}
-                      <span className="text-xs text-muted-foreground">
-                        /{q.max ?? 5}
-                      </span>
+                      {stats.averageRatings?.[q.id] ?? "-"}
+                      <span className="text-xs text-muted-foreground">/{q.max ?? 5}</span>
                     </span>
                   </div>
                 ))}

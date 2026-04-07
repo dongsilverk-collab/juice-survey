@@ -53,31 +53,16 @@ export async function GET() {
     }
   }
 
-  // 구매 의향 분포
+  // 제품별 응답 수 (purchaseIntentBreakdown 필드 재활용)
   const purchaseIntentBreakdown: Record<string, number> = {};
   for (const r of responses) {
-    const intent = r.answers?.purchase_intent as string | undefined;
-    if (intent) {
-      purchaseIntentBreakdown[intent] = (purchaseIntentBreakdown[intent] || 0) + 1;
+    const product = r.answers?.product as string | undefined;
+    if (product) {
+      purchaseIntentBreakdown[product] = (purchaseIntentBreakdown[product] || 0) + 1;
     }
   }
 
-  // NPS 계산 (0-6: 비추, 7-8: 중립, 9-10: 추천)
-  const npsValues = responses
-    .map((r) => {
-      const val = r.answers?.recommend_likelihood;
-      return typeof val === "number" ? val : null;
-    })
-    .filter((v): v is number => v !== null);
-
-  let npsScore = 0;
-  if (npsValues.length > 0) {
-    const promoters = npsValues.filter((v) => v >= 9).length;
-    const detractors = npsValues.filter((v) => v <= 6).length;
-    npsScore = Math.round(
-      ((promoters - detractors) / npsValues.length) * 100
-    );
-  }
+  const npsScore = 0;
 
   return NextResponse.json({
     totalResponses,
