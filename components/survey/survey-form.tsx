@@ -9,49 +9,60 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, ChevronRight, CheckCircle2 } from "lucide-react";
 
 const SURVEY_ID = "a0000000-0000-0000-0000-000000000001";
-
 type Answers = Record<string, string | number | string[]>;
+
+// 단계: "info" → "select" → 제품 ID (순서 자유)
+type Step = "info" | "select" | string;
 
 export function SurveyForm() {
   const router = useRouter();
-
-  // 0 = 기본정보, 1~N = 제품별 평가
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<Step>("info");
   const [demographics, setDemographics] = useState({
     respondent_name: "",
     respondent_age_group: "",
     respondent_gender: "",
   });
-  // 제품별 답변 모음
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [allAnswers, setAllAnswers] = useState<Record<string, Answers>>(
     () => Object.fromEntries(PRODUCTS.map((p) => [p.id, {}]))
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const currentProduct = PRODUCTS[step - 1];
-  const isLastProduct = step === PRODUCTS.length;
-  const isDemographicsStep = step === 0;
+  const currentAnswers = typeof step === "string" && step !== "info" && step !== "select"
+    ? allAnswers[step] ?? {}
+    : {};
 
-  const currentAnswers = currentProduct ? allAnswers[currentProduct.id] : {};
+  // 현재 제품의 필수 항목이 모두 채워졌는지
+  const isProductDone = (productId: string) => {
+    const ans = allAnswers[productId] ?? {};
+    return surveyConfig.questions
+      .filter((q) => q.required)
+      .every((q) => {
+        const v = ans[q.id];
+        return v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0);
+      });
+  };
 
   const handleAnswerChange = (questionId: string, value: string | number | string[]) => {
-    if (!currentProduct) return;
+    if (!step || step === "info" || step === "select") return;
     setAllAnswers((prev) => ({
       ...prev,
-      [currentProduct.id]: { ...prev[currentProduct.id], [questionId]: value },
+      [step]: { ...prev[step], [questionId]: value },
     }));
     if (errors[questionId]) {
       setErrors((prev) => { const n = { ...prev }; delete n[questionId]; return n; });
     }
   };
 
-  const validateCurrentProduct = (): boolean => {
+  const validateCurrent = (): boolean => {
+    if (!step || step === "info" || step === "select") return true;
     const newErrors: Record<string, string> = {};
     for (const q of surveyConfig.questions) {
       if (!q.required) continue;
@@ -61,36 +72,41 @@ export function SurveyForm() {
       }
     }
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length > 0) {
+      const firstId = surveyConfig.questions.find((q) => q.required && !currentAnswers[q.id])?.id;
+      if (firstId) document.getElementById(`q-${firstId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return false;
+    }
+    return true;
   };
 
-  const handleNext = () => {
-    if (!validateCurrentProduct()) {
-      const firstErrorId = Object.keys(errors)[0]
-        ?? surveyConfig.questions.find((q) => q.required && !currentAnswers[q.id])?.id;
-      if (firstErrorId) {
-        document.getElementById(`q-${firstErrorId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      return;
+  const goToProduct = (productId: string) => {
+    if (step !== "info" && step !== "select") {
+      // 현재 제품 저장은 이미 실시간으로 됨, 그냥 이동
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
     setErrors({});
-    setStep((s) => s + 1);
+    setStep(productId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSubmit = async () => {
-    if (!validateCurrentProduct()) return;
+    if (!validateCurrent()) return;
+    const doneProducts = selectedProducts.filter((id) => isProductDone(id));
+    if (doneProducts.length === 0) {
+      alert("최소 한 개 제품을 평가해주세요.");
+      return;
+    }
     setSubmitting(true);
     try {
       await Promise.all(
-        PRODUCTS.map((product) =>
+        doneProducts.map((productId) =>
           fetch("/api/responses", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               survey_id: SURVEY_ID,
               ...demographics,
-              answers: { product: product.id, ...allAnswers[product.id] },
+              answers: { product: productId, ...allAnswers[productId] },
             }),
           })
         )
@@ -109,24 +125,12 @@ export function SurveyForm() {
     questions: surveyConfig.questions.filter((q) => q.section === section.id),
   }));
 
-  // 진행률
-  const totalSteps = PRODUCTS.length + 1; // 기본정보 + 제품들
-  const progress = (step / totalSteps) * 100;
+  const doneCount = selectedProducts.filter(isProductDone).length;
 
-  return (
-    <div className="space-y-6">
-      {/* 진행률 */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm pb-2 pt-2">
-        <Progress value={progress} className="h-2" />
-        <p className="text-xs text-muted-foreground mt-1 text-center">
-          {isDemographicsStep
-            ? "기본 정보 입력"
-            : `${step} / ${PRODUCTS.length} 제품 평가 중`}
-        </p>
-      </div>
-
-      {/* 기본 정보 */}
-      {isDemographicsStep && (
+  // ── 기본 정보 단계 ──────────────────────────────────────
+  if (step === "info") {
+    return (
+      <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">기본 정보</CardTitle>
@@ -174,77 +178,154 @@ export function SurveyForm() {
             </div>
           </CardContent>
         </Card>
-      )}
+        <Button size="lg" className="w-full" onClick={() => { setStep("select"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+          다음 <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
 
-      {/* 제품별 평가 */}
-      {currentProduct && (
-        <>
-          <div className="text-center space-y-1 py-2">
-            <p className="text-sm text-muted-foreground">
-              {step} / {PRODUCTS.length}번째 제품
-            </p>
-            <h2 className="text-xl font-bold">{currentProduct.label}</h2>
-          </div>
-
-          {groupedQuestions.map((section) => (
-            <Card key={section.id}>
-              <CardHeader>
-                <CardTitle className="text-lg">{section.title}</CardTitle>
-                {section.description && (
-                  <CardDescription>{section.description}</CardDescription>
+  // ── 제품 선택 단계 ──────────────────────────────────────
+  if (step === "select") {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">시음한 제품을 선택해주세요</CardTitle>
+            <CardDescription>오늘 시음한 제품만 선택하시면 됩니다.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {PRODUCTS.map((p) => (
+              <div
+                key={p.id}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                  selectedProducts.includes(p.id) ? "border-primary bg-primary/5" : "hover:bg-accent"
                 )}
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {section.questions.map((question, idx) => (
-                  <div key={question.id} id={`q-${question.id}`}>
-                    {idx > 0 && <Separator className="mb-6" />}
-                    <QuestionRenderer
-                      question={question}
-                      value={currentAnswers[question.id]}
-                      onChange={(value) => handleAnswerChange(question.id, value)}
-                      error={errors[question.id]}
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
-        </>
-      )}
+                onClick={() =>
+                  setSelectedProducts((prev) =>
+                    prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                  )
+                }
+              >
+                <Checkbox
+                  checked={selectedProducts.includes(p.id)}
+                  onCheckedChange={(checked) =>
+                    setSelectedProducts((prev) =>
+                      checked ? [...prev, p.id] : prev.filter((id) => id !== p.id)
+                    )
+                  }
+                />
+                <span className="font-medium">{p.label}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Button
+          size="lg"
+          className="w-full"
+          disabled={selectedProducts.length === 0}
+          onClick={() => {
+            if (selectedProducts.length > 0) {
+              goToProduct(selectedProducts[0]);
+            }
+          }}
+        >
+          평가 시작하기 ({selectedProducts.length}개 선택)
+        </Button>
+      </div>
+    );
+  }
 
-      {/* 버튼 */}
-      {isDemographicsStep ? (
+  // ── 제품 평가 단계 ──────────────────────────────────────
+  const currentProduct = PRODUCTS.find((p) => p.id === step)!;
+  const currentIdx = selectedProducts.indexOf(step);
+  const nextProductId = selectedProducts[currentIdx + 1] ?? null;
+
+  return (
+    <div className="space-y-4">
+      {/* 제품 탭 네비게이션 */}
+      <div className="flex gap-2 flex-wrap">
+        {selectedProducts.map((pid) => {
+          const p = PRODUCTS.find((x) => x.id === pid)!;
+          const done = isProductDone(pid);
+          const active = pid === step;
+          return (
+            <button
+              key={pid}
+              onClick={() => goToProduct(pid)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-all",
+                active
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : done
+                  ? "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
+                  : "bg-background hover:bg-accent border-border"
+              )}
+            >
+              {done && !active && <CheckCircle2 className="h-3 w-3" />}
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 진행 상황 */}
+      <p className="text-xs text-muted-foreground text-right">
+        {doneCount} / {selectedProducts.length} 완료
+      </p>
+
+      {/* 현재 제품 제목 */}
+      <div className="text-center py-2">
+        <h2 className="text-xl font-bold">{currentProduct.label}</h2>
+      </div>
+
+      {/* 질문 섹션 */}
+      {groupedQuestions.map((section) => (
+        <Card key={section.id}>
+          <CardHeader>
+            <CardTitle className="text-lg">{section.title}</CardTitle>
+            {section.description && <CardDescription>{section.description}</CardDescription>}
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {section.questions.map((question, idx) => (
+              <div key={question.id} id={`q-${question.id}`}>
+                {idx > 0 && <Separator className="mb-6" />}
+                <QuestionRenderer
+                  question={question}
+                  value={currentAnswers[question.id]}
+                  onChange={(value) => handleAnswerChange(question.id, value)}
+                  error={errors[question.id]}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+
+      {/* 하단 버튼 */}
+      <div className="flex gap-3">
+        {nextProductId ? (
+          <Button
+            size="lg"
+            className="flex-1"
+            onClick={() => { if (validateCurrent()) goToProduct(nextProductId); }}
+          >
+            다음 제품 <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        ) : null}
         <Button
           size="lg"
-          className="w-full text-base"
-          onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-        >
-          평가 시작하기
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
-      ) : isLastProduct ? (
-        <Button
-          size="lg"
-          className="w-full text-base"
+          variant={nextProductId ? "outline" : "default"}
+          className={nextProductId ? "flex-1" : "w-full"}
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || doneCount === 0}
         >
-          {submitting ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />제출 중...</>
-          ) : (
-            "전체 제출하기"
-          )}
+          {submitting
+            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />제출 중...</>
+            : `제출하기 (${doneCount}개)`}
         </Button>
-      ) : (
-        <Button
-          size="lg"
-          className="w-full text-base"
-          onClick={handleNext}
-        >
-          다음 제품 평가하기
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
-      )}
+      </div>
     </div>
   );
 }
