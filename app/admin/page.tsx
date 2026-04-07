@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { surveyConfig, PRODUCT_LABELS } from "@/config/survey-config";
+import { surveyConfig, PRODUCT_LABELS, PRODUCTS } from "@/config/survey-config";
 import type { SurveyStats } from "@/lib/types/survey";
 import {
   BarChart,
@@ -218,28 +218,67 @@ export default function AdminDashboardPage() {
           </Card>
         </div>
 
-        {/* 항목별 평균 평점 */}
+        {/* 제품별 평점 비교 테이블 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">항목별 평균 평점</CardTitle>
+            <CardTitle className="text-lg">제품별 평점 비교</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {surveyConfig.questions
-                .filter((q) => q.type === "scale")
-                .map((q) => (
-                  <div
-                    key={q.id}
-                    className="flex items-center justify-between p-3 rounded-lg border"
-                  >
-                    <span className="text-sm">{q.question}</span>
-                    <span className="font-bold ml-2 whitespace-nowrap">
-                      {stats.averageRatings?.[q.id] ?? "-"}
-                      <span className="text-xs text-muted-foreground">/{q.max ?? 5}</span>
-                    </span>
-                  </div>
-                ))}
-            </div>
+            {stats.totalResponses > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground min-w-[120px]">항목</th>
+                      {PRODUCTS.map((p) => (
+                        <th key={p.id} className="text-center py-2 px-2 font-medium min-w-[100px]">
+                          {p.label.replace("주스", "").replace("ABC", "ABC\n")}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {surveyConfig.questions
+                      .filter((q) => q.type === "scale")
+                      .map((q) => (
+                        <tr key={q.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 pr-4 text-muted-foreground">{q.question}</td>
+                          {PRODUCTS.map((p) => {
+                            const val = stats.productStats?.[p.id]?.[q.id];
+                            const score = val ?? null;
+                            const bg =
+                              score === null ? "" :
+                              score >= 4.5 ? "text-green-600 font-bold" :
+                              score >= 3.5 ? "text-blue-600 font-semibold" :
+                              score >= 2.5 ? "text-yellow-600" :
+                              "text-red-500";
+                            return (
+                              <td key={p.id} className={`text-center py-2 px-2 ${bg}`}>
+                                {score !== null ? `${score}` : "-"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    {/* 평균 행 */}
+                    <tr className="bg-muted/40 font-semibold">
+                      <td className="py-2 pr-4">전체 평균</td>
+                      {PRODUCTS.map((p) => {
+                        const vals = Object.values(stats.productStats?.[p.id] ?? {});
+                        const avg = vals.length > 0
+                          ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
+                          : "-";
+                        return (
+                          <td key={p.id} className="text-center py-2 px-2">{avg}</td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">아직 응답이 없습니다</p>
+            )}
           </CardContent>
         </Card>
       </div>

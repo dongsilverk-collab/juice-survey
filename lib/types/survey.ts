@@ -21,5 +21,6 @@ export interface SurveyStats {
   ratingDistribution: Record<string, Record<number, number>>;
   purchaseIntentBreakdown: Record<string, number>;
   npsScore: number;
+  productStats: Record<string, Record<string, number>>;
   recentResponses: SurveyResponse[];
 }

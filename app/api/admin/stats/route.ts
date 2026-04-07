@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { surveyConfig } from "@/config/survey-config";
+import { surveyConfig, PRODUCTS } from "@/config/survey-config";
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -64,12 +64,36 @@ export async function GET() {
 
   const npsScore = 0;
 
+  // 제품별 항목 평균 { productId: { questionId: avg } }
+  const productStats: Record<string, Record<string, number>> = {};
+  for (const product of PRODUCTS) {
+    const productResponses = responses.filter(
+      (r) => r.answers?.product === product.id
+    );
+    const ratings: Record<string, number> = {};
+    for (const q of ratingQuestions) {
+      const values = productResponses
+        .map((r) => {
+          const val = r.answers?.[q.id];
+          return typeof val === "number" ? val : null;
+        })
+        .filter((v): v is number => v !== null);
+      if (values.length > 0) {
+        ratings[q.id] = Number(
+          (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)
+        );
+      }
+    }
+    productStats[product.id] = ratings;
+  }
+
   return NextResponse.json({
     totalResponses,
     averageRatings,
     ratingDistribution,
     purchaseIntentBreakdown,
     npsScore,
+    productStats,
     recentResponses: responses.slice(0, 20),
   });
 }
