@@ -19,7 +19,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Users, Star, ClipboardList, Loader2 } from "lucide-react";
+import { Users, Star, ClipboardList, Loader2, Trash2 } from "lucide-react";
 
 const COLORS = ["#22c55e", "#3b82f6", "#eab308", "#f97316", "#ef4444"];
 
@@ -27,6 +27,20 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<SurveyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    if (!confirm("모든 응답을 삭제할까요? 이 작업은 되돌릴 수 없습니다.")) return;
+    setResetting(true);
+    try {
+      await fetch("/api/admin/reset", { method: "DELETE" });
+      setStats((prev) => prev ? { ...prev, totalResponses: 0, averageRatings: {}, ratingDistribution: {}, purchaseIntentBreakdown: {}, npsScore: 0, recentResponses: [] } : prev);
+    } catch {
+      alert("삭제 실패");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/admin/stats")
@@ -79,12 +93,18 @@ export default function AdminDashboardPage() {
             <h1 className="text-2xl font-bold">설문 관리 대시보드</h1>
             <p className="text-muted-foreground">건강주스 시음 평가 결과</p>
           </div>
-          <Link href="/admin/responses">
-            <Button variant="outline">
-              <ClipboardList className="mr-2 h-4 w-4" />
-              전체 응답 보기
+          <div className="flex gap-2">
+            <Link href="/admin/responses">
+              <Button variant="outline">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                전체 응답 보기
+              </Button>
+            </Link>
+            <Button variant="destructive" onClick={handleReset} disabled={resetting}>
+              {resetting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              응답 초기화
             </Button>
-          </Link>
+          </div>
         </div>
 
         {/* 핵심 지표 카드 */}
